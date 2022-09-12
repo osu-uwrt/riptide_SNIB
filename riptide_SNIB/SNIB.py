@@ -5,11 +5,15 @@ from rclpy.node import Node
 class SNIB(Node):
 
     def __init__(self):
-        pass
+        super().__init__('riptide_SNIB')
 
 
 def main(args=None):
     rclpy.init(args=args)
+
+    node = SNIB()
+
+    rclpy.sping(node)
 
     rclpy.shutdown()
 
