@@ -11,6 +11,9 @@ class SNIB(Node):
 def main(args=None):
     rclpy.init(args=args)
 
+    while(True):
+        print("SNIBing")
+
     rclpy.shutdown()
 
 if __name__ == "__main__":
