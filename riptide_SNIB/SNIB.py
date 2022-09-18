@@ -19,10 +19,10 @@ def main(args=None):
 
     # Spoof depth 
     depth_msg = PoseWithCovarianceStamped()
-    depth_msg.header.stamp = node.get_clock().now()
+    depth_msg.header.stamp = node.get_clock().now().to_msg()
     depth_msg.header.frame_id = "odom"
-    depth_msg.pose.pose.position.z = -10
-    depth_msg.pose.covariance[14] = 1e-3
+    depth_msg.pose.pose.position.z = -10.0
+    depth_msg.pose.covariance[14] = 1.0e-3
 
     node.depth_pub.publish(depth_msg)
 
