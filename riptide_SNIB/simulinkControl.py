@@ -22,7 +22,8 @@ def babysitMatlabEngine(engineName):
     eng.StartSim(nargout=0)
     
     sleep(10)
-
+    if(eng == None):
+        return False
     #run until the engine can no longer be found - ie the window has been closed
     while engineName in matlab.engine.find_matlab():
         sleep(10)
@@ -77,7 +78,7 @@ def pauseSimulation(eng):
 def continueSimulation(eng):
     if(eng == None):
         return False
-        
+
     eng.set_param(MODEL_NAME, "SimulationCommand", "continue", nargout=0)
 
     #verify if the command went through
