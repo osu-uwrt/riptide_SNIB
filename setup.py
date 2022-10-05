@@ -28,5 +28,8 @@ setup(
             'SNIB = riptide_SNIB.SNIB:main',
         ],
     },
+    py_modules=[
+        'riptide_SNIB.simulinkControl'
+    ]
 )
 
