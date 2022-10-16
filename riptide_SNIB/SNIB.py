@@ -3,12 +3,14 @@ from click import launch
 from numpy import empty
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped
 from riptide_msgs2.msg import Depth 
 from sensor_msgs.msg import Imu
+from nav_msgs.msg import Odometry
 import matlab.engine
 from riptide_SNIB import simulinkControl
+import numpy as np
 import time
 
 class SNIB(Node):
@@ -23,8 +25,11 @@ class SNIB(Node):
         # Publishers
         '''Sensor data (to filter)'''
         self.depth_pub = self.create_publisher(Depth, "depth/raw", qos_profile_sensor_data)
-        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_raw", qos_profile_sensor_data)
+        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_twist", qos_profile_sensor_data)
         self.imu_pub = self.create_publisher(Imu, "imu/imu/data", qos_profile_sensor_data)
+
+        #One time publisher for starting position at 0s
+        self.initial_position_pub = self.create_publisher(Odometry, "odometry/filtered", qos_profile_system_default)
         
         # Subscribers
         '''Simulator pose (from Simulink)'''
@@ -33,6 +38,8 @@ class SNIB(Node):
         '''Sensor data (from Simulink)'''
         self.sim_dvl_sub = self.create_subscription(Twist, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
+
+        self.publishStartingPosition()
 
         session_names = None
         timeout = time.time() + 60
@@ -118,11 +125,44 @@ class SNIB(Node):
                       1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,]
 
         dvl_msg.header.stamp = time_stamp
-        dvl_msg.header.frameid = "tempest/dvl_link"
+        dvl_msg.header.frame_id = "tempest/dvl_link"
         dvl_msg.twist.covariance = cov_matrix
         dvl_msg.twist.twist = msg
 
         self.dvl_pub.publish(dvl_msg)
+
+    def publishStartingPosition(self):
+        #basically 20 lines of its at 0 
+
+        initial_pos_msg = Odometry()
+
+        time_stamp = self.get_clock().now().to_msg()
+
+        initial_pos_msg.header.stamp = time_stamp
+        initial_pos_msg.header.frame_id = "world"
+
+        initial_pos_msg.pose.pose.position.x = 0.0
+        initial_pos_msg.pose.pose.position.y = 0.0
+        initial_pos_msg.pose.pose.position.z = 0.0
+
+        initial_pos_msg.pose.pose.orientation.w = 1.0
+        initial_pos_msg.pose.pose.orientation.x = 0.0
+        initial_pos_msg.pose.pose.orientation.y = 0.0
+        initial_pos_msg.pose.pose.orientation.z = 0.0
+
+        initial_pos_msg.pose.covariance = np.zeros(shape=(36))
+
+        initial_pos_msg.twist.twist.linear.x = 0.0
+        initial_pos_msg.twist.twist.linear.y = 0.0
+        initial_pos_msg.twist.twist.linear.z = 0.0
+
+        initial_pos_msg.twist.twist.angular.x = 0.0
+        initial_pos_msg.twist.twist.angular.y = 0.0
+        initial_pos_msg.twist.twist.angular.z = 0.0
+
+        initial_pos_msg.twist.covariance = np.zeros(shape=(36))
+
+        self.initial_position_pub.publish(initial_pos_msg)
 
 def main(args=None):
     rclpy.init(args=args)
