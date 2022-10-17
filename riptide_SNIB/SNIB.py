@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped
-from riptide_msgs2.msg import Depth 
+from riptide_msgs2.msg import Depth, FirmwareState
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 import matlab.engine
@@ -31,6 +31,9 @@ class SNIB(Node):
         #One time publisher for starting position at 0s
         self.initial_position_pub = self.create_publisher(Odometry, "odometry/filtered", qos_profile_system_default)
         
+        #pretend that the kill switch is in
+        self.firmware_state_pub = self.create_publisher(FirmwareState, "state/firmware", qos_profile_system_default)
+
         # Subscribers
         '''Simulator pose (from Simulink)'''
         self.sim_pose_sub = self.create_subscription(Pose, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
@@ -40,6 +43,7 @@ class SNIB(Node):
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
 
         self.publishStartingPosition()
+        self.publishEnabledFirmwareState()
 
         session_names = None
         timeout = time.time() + 60
@@ -137,7 +141,6 @@ class SNIB(Node):
         initial_pos_msg = Odometry()
 
         time_stamp = self.get_clock().now().to_msg()
-
         initial_pos_msg.header.stamp = time_stamp
         initial_pos_msg.header.frame_id = "world"
 
@@ -163,6 +166,33 @@ class SNIB(Node):
         initial_pos_msg.twist.covariance = np.zeros(shape=(36))
 
         self.initial_position_pub.publish(initial_pos_msg)
+
+    def publishEnabledFirmwareState(self):
+        firmware_state_msg = FirmwareState()
+
+        time_stamp = self.get_clock().now().to_msg()
+        firmware_state_msg.header.stamp = time_stamp
+        firmware_state_msg.header.frame_id = "world"
+
+        firmware_state_msg.version_major = 0
+        firmware_state_msg.version_minor = 0
+
+        firmware_state_msg.depth_sensor_initialized = False
+        firmware_state_msg.actuator_connected = False
+
+        firmware_state_msg.actuator_faults = 0
+        firmware_state_msg.peltier_cooling_threshold = 0
+        firmware_state_msg.copro_faults = 0
+        firmware_state_msg.copro_memory_usage = 0
+
+        # pretend the kill switch is in
+        firmware_state_msg.kill_switches_enabled = 1
+
+        firmware_state_msg.kill_switches_asserting_kill = 0
+        firmware_state_msg.kill_switches_needs_update = 0
+        firmware_state_msg.kill_switches_timed_out = 0
+
+        self.firmware_state_pub.publish(firmware_state_msg)
 
 def main(args=None):
     rclpy.init(args=args)
