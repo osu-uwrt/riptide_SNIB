@@ -8,6 +8,7 @@ from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState
 from sensor_msgs.msg import Imu
+from std_msgs .msg import Float32MultiArray, Header
 from nav_msgs.msg import Odometry
 import matlab.engine
 from riptide_SNIB import simulinkControl
@@ -29,6 +30,10 @@ class SNIB(Node):
         self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_twist", qos_profile_sensor_data)
         self.imu_pub = self.create_publisher(Imu, "imu/imu/data", qos_profile_sensor_data)
 
+        #thruster publishers
+        self.thruster_stamp_pub = self.create_publisher(Header, "simulation/thruster_stamp", qos_profile_system_default)
+        self.thruster_forces_pub = self.create_publisher(Float32MultiArray, "simulation/thruster_forces", qos_profile_system_default)
+
         #One time publisher for starting position at 0s
         self.initial_position_pub = self.create_publisher(PoseWithCovarianceStamped, "set_pose", qos_profile_system_default)
 
@@ -45,6 +50,8 @@ class SNIB(Node):
         '''Sensor data (from Simulink)'''
         self.sim_dvl_sub = self.create_subscription(Twist, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
+
+        self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
 
         # t = Timer(5, self.publishStartingPosition)
         # t.start()
@@ -142,6 +149,21 @@ class SNIB(Node):
         dvl_msg.twist.twist = msg
 
         self.dvl_pub.publish(dvl_msg)
+
+    def thruster_callback(self, msg):
+        #ensure that matlab knows exactly when the thruster forces are published
+        #echo thruster forces to simulinl
+
+        stamp_msg = Header()
+        time_stamp = self.get_clock().now().to_msg()
+
+        stamp_msg.stamp = time_stamp
+        stamp_msg.frame_id = "world"
+
+        self.thruster_stamp_pub.publish(stamp_msg)
+        self.thruster_forces_pub.publish(msg)
+
+        
 
     def publishStartingPosition(self):
         #basically 20 lines of its at 0 
