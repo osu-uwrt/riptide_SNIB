@@ -1,10 +1,11 @@
 from logging import Logger
+from threading import Timer
 from click import launch
 from numpy import empty
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
-from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped
+from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
@@ -29,7 +30,10 @@ class SNIB(Node):
         self.imu_pub = self.create_publisher(Imu, "imu/imu/data", qos_profile_sensor_data)
 
         #One time publisher for starting position at 0s
-        self.initial_position_pub = self.create_publisher(Odometry, "odometry/filtered", qos_profile_system_default)
+        self.initial_position_pub = self.create_publisher(PoseWithCovarianceStamped, "set_pose", qos_profile_system_default)
+
+        #Fake dvl twist publisher
+        self.initial_twist_pub = self.create_publisher(Odometry, "simulation/twist", qos_profile_system_default)
         
         #pretend that the kill switch is in
         self.firmware_state_pub = self.create_publisher(FirmwareState, "state/firmware", qos_profile_system_default)
@@ -42,8 +46,12 @@ class SNIB(Node):
         self.sim_dvl_sub = self.create_subscription(Twist, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
 
+        # t = Timer(5, self.publishStartingPosition)
+        # t.start()
         self.publishStartingPosition()
         self.publishEnabledFirmwareState()
+        self.publishInitalTwist()
+
 
         session_names = None
         timeout = time.time() + 60
@@ -138,34 +146,58 @@ class SNIB(Node):
     def publishStartingPosition(self):
         #basically 20 lines of its at 0 
 
-        initial_pos_msg = Odometry()
+        initial_pos_msg = PoseWithCovarianceStamped()
 
         time_stamp = self.get_clock().now().to_msg()
         initial_pos_msg.header.stamp = time_stamp
         initial_pos_msg.header.frame_id = "world"
 
+        #start 1m under water
         initial_pos_msg.pose.pose.position.x = 0.0
         initial_pos_msg.pose.pose.position.y = 0.0
-        initial_pos_msg.pose.pose.position.z = 0.0
+        initial_pos_msg.pose.pose.position.z = -1.0
 
         initial_pos_msg.pose.pose.orientation.w = 1.0
         initial_pos_msg.pose.pose.orientation.x = 0.0
         initial_pos_msg.pose.pose.orientation.y = 0.0
         initial_pos_msg.pose.pose.orientation.z = 0.0
 
-        initial_pos_msg.pose.covariance = np.zeros(shape=(36))
-
-        initial_pos_msg.twist.twist.linear.x = 0.0
-        initial_pos_msg.twist.twist.linear.y = 0.0
-        initial_pos_msg.twist.twist.linear.z = 0.0
-
-        initial_pos_msg.twist.twist.angular.x = 0.0
-        initial_pos_msg.twist.twist.angular.y = 0.0
-        initial_pos_msg.twist.twist.angular.z = 0.0
-
-        initial_pos_msg.twist.covariance = np.zeros(shape=(36))
+        initial_pos_msg.pose.covariance = np.full(shape=(36), fill_value=.0001)
 
         self.initial_position_pub.publish(initial_pos_msg)
+
+    def publishInitalTwist(self):
+        #basically 20 lines of its at 0 
+
+        initial_odom_msg = Odometry()
+
+        time_stamp = self.get_clock().now().to_msg()
+        initial_odom_msg.header.stamp = time_stamp
+        initial_odom_msg.header.frame_id = "world"
+
+        #start 1m under water
+        initial_odom_msg.pose.pose.position.x = 0.0
+        initial_odom_msg.pose.pose.position.y = 0.0
+        initial_odom_msg.pose.pose.position.z = -1.0
+
+        initial_odom_msg.pose.pose.orientation.w = 1.0
+        initial_odom_msg.pose.pose.orientation.x = 0.0
+        initial_odom_msg.pose.pose.orientation.y = 0.0
+        initial_odom_msg.pose.pose.orientation.z = 0.0
+
+        initial_odom_msg.pose.covariance = np.full(shape=(36), fill_value=.0001)
+
+        initial_odom_msg.twist.twist.linear.x = 0.0
+        initial_odom_msg.twist.twist.linear.y = 0.0
+        initial_odom_msg.twist.twist.linear.z = 0.0
+
+        initial_odom_msg.twist.twist.angular.x = 0.0
+        initial_odom_msg.twist.twist.angular.y = 0.0
+        initial_odom_msg.twist.twist.angular.z = 0.0
+
+        initial_odom_msg.twist.covariance = np.full(shape=(36), fill_value=.0001)
+
+        self.initial_twist_pub.publish(initial_odom_msg)
 
     def publishEnabledFirmwareState(self):
         firmware_state_msg = FirmwareState()
