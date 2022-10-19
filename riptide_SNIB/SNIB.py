@@ -5,7 +5,7 @@ from numpy import empty
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
-from geometry_msgs.msg import Pose, Twist, TwistWithCovarianceStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState
 from sensor_msgs.msg import Imu
 from std_msgs .msg import Float32MultiArray, Header
@@ -45,10 +45,10 @@ class SNIB(Node):
 
         # Subscribers
         '''Simulator pose (from Simulink)'''
-        self.sim_pose_sub = self.create_subscription(Pose, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
+        self.sim_pose_sub = self.create_subscription(PoseStamped, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
 
         '''Sensor data (from Simulink)'''
-        self.sim_dvl_sub = self.create_subscription(Twist, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
+        self.sim_dvl_sub = self.create_subscription(TwistStamped, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
@@ -96,12 +96,13 @@ class SNIB(Node):
 
         time_stamp = self.get_clock().now().to_msg()
 
+
         depth_variance = 0.1
 
         depth_msg.header.stamp = time_stamp
         depth_msg.header.frame_id = "tempest/pressure_link"
         
-        depth_msg.depth = msg.position.z
+        depth_msg.depth = msg.pose.position.z
         depth_msg.variance = depth_variance
 
         self.depth_pub.publish(depth_msg)
@@ -146,7 +147,7 @@ class SNIB(Node):
         dvl_msg.header.stamp = time_stamp
         dvl_msg.header.frame_id = "tempest/dvl_link"
         dvl_msg.twist.covariance = cov_matrix
-        dvl_msg.twist.twist = msg
+        dvl_msg.twist.twist = msg.twist
 
         self.dvl_pub.publish(dvl_msg)
 
