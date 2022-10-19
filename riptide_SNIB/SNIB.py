@@ -11,15 +11,18 @@ from sensor_msgs.msg import Imu
 from std_msgs .msg import Float32MultiArray, Header
 from nav_msgs.msg import Odometry
 import matlab.engine
-from riptide_SNIB import simulinkControl
+from riptide_SNIB import simulinkControl, simulinkDataVisuals
 import numpy as np
 import time
+
+VISUALS = True
 
 class SNIB(Node):
 
     local_simulink = True # whether or not to launch the simulink simulation locally
     launch_unity = True #wether or not to launch unity locally
     matlab_engine = None # the matlab engine running simulink
+    data_visuals_engine = None # the data visualization engine
 
     def __init__(self):
         super().__init__('riptide_SNIB')
@@ -90,6 +93,8 @@ class SNIB(Node):
             self.local_simulink = False
             self.get_logger().info("The simulink portion of the simulation will not be launched locally")
 
+        self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
+
 
     def sim_pose_callback(self, msg):
         depth_msg = Depth()
@@ -106,6 +111,14 @@ class SNIB(Node):
         depth_msg.variance = depth_variance
 
         self.depth_pub.publish(depth_msg)
+
+        if(VISUALS):
+            time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000
+
+            if(time < 1000000):
+                return
+
+            self.data_visuals_engine.append_pose_data(time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
         
     def imu_callback(self, msg):
         imu_msg = Imu()
