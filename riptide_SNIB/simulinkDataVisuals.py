@@ -34,8 +34,12 @@ class visualizationManager:
         # self.y_pose_plot.plot([4,5,6], [3,4,5])
         # self.z_pose_plot.plot([6,7,8], [4,65,6])
 
-        #prep plot
+        #prep plot 
         self.figure.canvas.draw()
+        self.figure.canvas.manager.set_window_title('X, Y, Z Positions') #set window title
+        self.figure.tight_layout(pad=1.0) #set spacing
+        self.figure.set_figheight(8)
+        self.figure.set_figwidth(11)
         self.renderer = self.figure.canvas.renderer
         self.figure.draw(self.renderer)
 
@@ -57,6 +61,8 @@ class visualizationManager:
         self.z_pose_plot.plot(self.ekf_time_data, self.ekf_z_pose_data, "-r", label ="EKF Z")
 
 
+
+
         #resize
         if(self.initialDraw):
             self.x_pose_plot.relim()
@@ -65,6 +71,19 @@ class visualizationManager:
             self.y_pose_plot.autoscale_view()
             self.z_pose_plot.relim()
             self.z_pose_plot.autoscale_view()
+
+        #add labels
+        #x labels
+        self.x_pose_plot.set_xlabel("Time (sec)")
+        self.x_pose_plot.set_ylabel("X Position (m)")
+
+        #y labels
+        self.y_pose_plot.set_xlabel("Time (sec)")
+        self.y_pose_plot.set_ylabel("Y Position (m)")
+
+        #z labels
+        self.z_pose_plot.set_xlabel("Time (sec)")
+        self.z_pose_plot.set_ylabel("Z Position (m)")
 
         self.initialDraw = False
 
@@ -75,7 +94,6 @@ class visualizationManager:
         plt.pause(1e-17)
 
     def append_sim_pose_data(self, time, x, y, z):
-        
         #add new data
         self.sim_time_data.append(time)
         self.sim_x_pose_data.append(x)
