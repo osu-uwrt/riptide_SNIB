@@ -117,7 +117,7 @@ class SNIB(Node):
     def sim_pose_callback(self, msg):
         depth_msg = Depth()
 
-        time_stamp = self.get_clock().now().to_msg()
+        time_stamp = msg.header.stamp
 
         depth_variance = 0.1
 
@@ -144,7 +144,7 @@ class SNIB(Node):
     def imu_callback(self, msg):
         imu_msg = Imu()
 
-        time_stamp = self.get_clock().now().to_msg()
+        time_stamp = msg.header.stamp
 
         #TODO: These should be loaded from a parameter when this node starts running, not every callback.
         orientation_cov_matrix = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
@@ -168,7 +168,7 @@ class SNIB(Node):
     def dvl_callback(self, msg):
         dvl_msg = TwistWithCovarianceStamped()
 
-        time_stamp = self.get_clock().now().to_msg()
+        time_stamp = msg.header.stamp
 
         #TODO: This should be loaded from a parameter when this node starts running, not every callback.
         cov_matrix = [1.0, 1.0, 1.0, 1.0, 1.0 ,1.0, 
@@ -185,7 +185,8 @@ class SNIB(Node):
 
         if not self.started_ekf:
             #start ekf -- it doesn't start until dvl has twist
-            self.publishInitalTwist()
+
+            #self.publishInitalTwist()
             self.started_ekf = True
 
 
@@ -235,6 +236,7 @@ class SNIB(Node):
         initial_odom_msg = Odometry()
 
         time_stamp = self.get_clock().now().to_msg()
+
         initial_odom_msg.header.stamp = time_stamp
         initial_odom_msg.header.frame_id = "world"
 
