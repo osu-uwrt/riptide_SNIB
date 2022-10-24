@@ -2,6 +2,7 @@ from logging import Logger
 from threading import Timer
 from click import launch
 from numpy import empty
+from sympy import true
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
@@ -15,7 +16,8 @@ from riptide_SNIB import simulinkControl, simulinkDataVisuals
 import numpy as np
 import time
 
-VISUALS = True
+VISUALS = True # Wether to show ekf and simulation positions
+BUFFER_TIME = 3 # Number of seconds between bringup and actually starting simulation
 
 class SNIB(Node):
 
@@ -24,13 +26,15 @@ class SNIB(Node):
     matlab_engine = None # the matlab engine running simulink
     data_visuals_engine = None # the data visualization engine
 
+    started_ekf = False # has the dvl been sent its inital twist
+
     def __init__(self):
         super().__init__('riptide_SNIB')
 
         # Publishers
         '''Sensor data (to filter)'''
         self.depth_pub = self.create_publisher(Depth, "depth/raw", qos_profile_sensor_data)
-        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_twist", qos_profile_sensor_data)
+        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl/twist", qos_profile_sensor_data)
         self.imu_pub = self.create_publisher(Imu, "imu/imu/data", qos_profile_sensor_data)
 
         #thruster publishers
@@ -56,12 +60,16 @@ class SNIB(Node):
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
 
+        # show expected pose
+        if(VISUALS):
+            self.odometry_sub = self.create_subscription(Odometry, "odometry/filtered", self.odometry_cb, qos_profile_system_default)
+            self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
+
+
         # t = Timer(5, self.publishStartingPosition)
         # t.start()
-        self.publishStartingPosition()
+        #self.publishStartingPosition()
         self.publishEnabledFirmwareState()
-        self.publishInitalTwist()
-
 
         session_names = None
         timeout = time.time() + 60
@@ -93,14 +101,23 @@ class SNIB(Node):
             self.local_simulink = False
             self.get_logger().info("The simulink portion of the simulation will not be launched locally")
 
-        self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
+        if(self.local_simulink):
+            #begin actual sim starting process
+
+            physicalStartTimer = Timer(BUFFER_TIME, self.beginSimulationPeriod)
+
+            #wait for the engine to load
+            simulinkControl.getSimulationStatus(self.matlab_engine)
+            
+            physicalStartTimer.start()
+
+            self.get_logger().info(f"Beginning physical simulation in {BUFFER_TIME} seconds!")
 
 
     def sim_pose_callback(self, msg):
         depth_msg = Depth()
 
         time_stamp = self.get_clock().now().to_msg()
-
 
         depth_variance = 0.1
 
@@ -113,12 +130,16 @@ class SNIB(Node):
         self.depth_pub.publish(depth_msg)
 
         if(VISUALS):
-            time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000
+            time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
+
+            time2 = time_stamp.sec + time_stamp.nanosec / 1000000000
+
+            self.get_logger().info(f"Simulink time {time}.... ROS time {time2}")
 
             if(time < 1000000):
                 return
 
-            self.data_visuals_engine.append_pose_data(time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+            self.data_visuals_engine.append_sim_pose_data(time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
         
     def imu_callback(self, msg):
         imu_msg = Imu()
@@ -158,9 +179,15 @@ class SNIB(Node):
                       1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,]
 
         dvl_msg.header.stamp = time_stamp
-        dvl_msg.header.frame_id = "tempest/dvl_link"
+        dvl_msg.header.frame_id = "tempest/base_link"
         dvl_msg.twist.covariance = cov_matrix
         dvl_msg.twist.twist = msg.twist
+
+        if not self.started_ekf:
+            #start ekf -- it doesn't start until dvl has twist
+            self.publishInitalTwist()
+            self.started_ekf = True
+
 
         self.dvl_pub.publish(dvl_msg)
 
@@ -261,6 +288,26 @@ class SNIB(Node):
         firmware_state_msg.kill_switches_timed_out = 0
 
         self.firmware_state_pub.publish(firmware_state_msg)
+
+    def odometry_cb(self, msg):
+        time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000
+
+        if(time < 1000000):
+            return
+
+        self.data_visuals_engine.append_ekf_pose_data(time, msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
+
+    def beginSimulationPeriod(self):
+        self.get_logger().info("Beginning Physical Simulation Startup!")
+
+        #Tell Matlab to start
+        success = simulinkControl.startSimulation(self.matlab_engine)
+        if not success:
+            self.get_logger().error("Failed to Launch Matlab Simulation!")
+            return
+    
+        self.get_logger().info("Physical Simulation has begun!")
+
 
 def main(args=None):
     rclpy.init(args=args)

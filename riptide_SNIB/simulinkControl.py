@@ -28,6 +28,13 @@ def babysitMatlabEngine(engineName):
     while engineName in matlab.engine.find_matlab():
         sleep(10)
 
+def getSimulationStatus(eng):
+    # get the current simulink status
+    # also functions as a wait until loaded
+    status = eng.get_param(MODEL_NAME, "SimulationStatus")
+    return status
+
+
 
 #starts sim - True success, False fail
 def startSimulation(eng):

@@ -8,9 +8,18 @@ class visualizationManager:
     z_pose_plot = None
 
     sim_time_data = []
+    ekf_time_data = []
+
     sim_x_pose_data = []
     sim_y_pose_data = []
     sim_z_pose_data = []
+
+    ekf_x_pose_data = []
+    ekf_y_pose_data = []
+    ekf_z_pose_data = []
+
+    last_update_time = 0 # the time the view has been last updated
+    update_interval = 1# number of seconds between view updates
 
     initialDraw = True # is this the first time the plots have been drawn
 
@@ -34,10 +43,19 @@ class visualizationManager:
         plt.pause(1e-17)
 
     def update_plots(self):
+        if(len(self.sim_time_data) > 1):
+            self.lastUpdateTime = self.sim_time_data[len(self.sim_time_data) - 1]
+
         #add data to plots
-        self.x_pose_plot.plot(self.sim_time_data, self.sim_x_pose_data)
-        self.y_pose_plot.plot(self.sim_time_data, self.sim_y_pose_data)
-        self.z_pose_plot.plot(self.sim_time_data, self.sim_z_pose_data)
+        self.x_pose_plot.plot(self.sim_time_data, self.sim_x_pose_data, "-k", label="Real X")
+        self.x_pose_plot.plot(self.ekf_time_data, self.ekf_x_pose_data, "-r", label="EKF X")
+
+        self.y_pose_plot.plot(self.sim_time_data, self.sim_y_pose_data, "-k", label="Real Y")
+        self.y_pose_plot.plot(self.ekf_time_data, self.ekf_y_pose_data, "-r", label="EKF Y")
+
+        self.z_pose_plot.plot(self.sim_time_data, self.sim_z_pose_data, "-k", label="Real Z")
+        self.z_pose_plot.plot(self.ekf_time_data, self.ekf_z_pose_data, "-r", label ="EKF Z")
+
 
         #resize
         if(self.initialDraw):
@@ -56,12 +74,25 @@ class visualizationManager:
         plt.draw()
         plt.pause(1e-17)
 
-    def append_pose_data(self, time, x, y, z):
+    def append_sim_pose_data(self, time, x, y, z):
+        
         #add new data
         self.sim_time_data.append(time)
         self.sim_x_pose_data.append(x)
         self.sim_y_pose_data.append(y)
         self.sim_z_pose_data.append(z)
 
+        if time > (self.last_update_time + self.update_interval):
+            self.update_plots()
+
+    def append_ekf_pose_data(self, time, x, y, z):
+        
+        #add new data
+        self.ekf_time_data.append(time)
+        self.ekf_x_pose_data.append(x)
+        self.ekf_y_pose_data.append(y)
+        self.ekf_z_pose_data.append(z)
+
         self.update_plots()
+
 
