@@ -1,4 +1,3 @@
-from time import sleep
 import matplotlib.pyplot as plt
 
 class visualizationManager:
@@ -60,9 +59,6 @@ class visualizationManager:
         self.z_pose_plot.plot(self.sim_time_data, self.sim_z_pose_data, "-k", label="Real Z")
         self.z_pose_plot.plot(self.ekf_time_data, self.ekf_z_pose_data, "-r", label ="EKF Z")
 
-
-
-
         #resize
         if(self.initialDraw):
             self.x_pose_plot.relim()
@@ -93,20 +89,20 @@ class visualizationManager:
         plt.draw()
         plt.pause(1e-17)
 
-    def append_sim_pose_data(self, time, x, y, z):
+    def append_sim_pose_data(self, current_time, x, y, z):
         #add new data
-        self.sim_time_data.append(time)
+        self.sim_time_data.append(current_time)
         self.sim_x_pose_data.append(x)
         self.sim_y_pose_data.append(y)
         self.sim_z_pose_data.append(z)
 
-        if time > (self.last_update_time + self.update_interval):
+        if current_time > (self.last_update_time + self.update_interval):
             self.update_plots()
 
-    def append_ekf_pose_data(self, time, x, y, z):
+    def append_ekf_pose_data(self, current_time, x, y, z):
         
         #add new data
-        self.ekf_time_data.append(time)
+        self.ekf_time_data.append(current_time)
         self.ekf_x_pose_data.append(x)
         self.ekf_y_pose_data.append(y)
         self.ekf_z_pose_data.append(z)

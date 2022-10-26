@@ -7,7 +7,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
-from riptide_msgs2.msg import Depth, FirmwareState
+from riptide_msgs2.msg import Depth, FirmwareState, ControllerCommand
 from sensor_msgs.msg import Imu
 from std_msgs .msg import Float32MultiArray, Header
 from nav_msgs.msg import Odometry
@@ -50,6 +50,10 @@ class SNIB(Node):
         #pretend that the kill switch is in
         self.firmware_state_pub = self.create_publisher(FirmwareState, "state/firmware", qos_profile_system_default)
 
+        #control the controllers
+        self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/linear", qos_profile_system_default)
+        self.controller_angular_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/angular", qos_profile_system_default)
+
         # Subscribers
         '''Simulator pose (from Simulink)'''
         self.sim_pose_sub = self.create_subscription(PoseStamped, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
@@ -65,11 +69,8 @@ class SNIB(Node):
             self.odometry_sub = self.create_subscription(Odometry, "odometry/filtered", self.odometry_cb, qos_profile_system_default)
             self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
 
-
-        # t = Timer(5, self.publishStartingPosition)
-        # t.start()
-        #self.publishStartingPosition()
         self.publishEnabledFirmwareState()
+        self.publish_initial_controller_state(3)
 
         session_names = None
         timeout = time.time() + 60
@@ -130,16 +131,16 @@ class SNIB(Node):
         self.depth_pub.publish(depth_msg)
 
         if(VISUALS):
-            time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
+            t = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
 
-            time2 = time_stamp.sec + time_stamp.nanosec / 1000000000
+            time2 = time.time()
 
-            self.get_logger().info(f"Simulink time {time}.... ROS time {time2}")
+            self.get_logger().info(f"Simulink time {t}.... ROS time {time2}")
 
-            if(time < 1000000):
+            if(t < 1000000):
                 return
 
-            self.data_visuals_engine.append_sim_pose_data(time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+            self.data_visuals_engine.append_sim_pose_data(t, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
         
     def imu_callback(self, msg):
         imu_msg = Imu()
@@ -205,65 +206,6 @@ class SNIB(Node):
         self.thruster_stamp_pub.publish(stamp_msg)
         self.thruster_forces_pub.publish(msg)
 
-        
-
-    def publishStartingPosition(self):
-        #basically 20 lines of its at 0 
-
-        initial_pos_msg = PoseWithCovarianceStamped()
-
-        time_stamp = self.get_clock().now().to_msg()
-        initial_pos_msg.header.stamp = time_stamp
-        initial_pos_msg.header.frame_id = "world"
-
-        #start 1m under water
-        initial_pos_msg.pose.pose.position.x = 0.0
-        initial_pos_msg.pose.pose.position.y = 0.0
-        initial_pos_msg.pose.pose.position.z = -1.0
-
-        initial_pos_msg.pose.pose.orientation.w = 1.0
-        initial_pos_msg.pose.pose.orientation.x = 0.0
-        initial_pos_msg.pose.pose.orientation.y = 0.0
-        initial_pos_msg.pose.pose.orientation.z = 0.0
-
-        initial_pos_msg.pose.covariance = np.full(shape=(36), fill_value=.0001)
-
-        self.initial_position_pub.publish(initial_pos_msg)
-
-    def publishInitalTwist(self):
-        #basically 20 lines of its at 0 
-
-        initial_odom_msg = Odometry()
-
-        time_stamp = self.get_clock().now().to_msg()
-
-        initial_odom_msg.header.stamp = time_stamp
-        initial_odom_msg.header.frame_id = "world"
-
-        #start 1m under water
-        initial_odom_msg.pose.pose.position.x = 0.0
-        initial_odom_msg.pose.pose.position.y = 0.0
-        initial_odom_msg.pose.pose.position.z = -1.0
-
-        initial_odom_msg.pose.pose.orientation.w = 1.0
-        initial_odom_msg.pose.pose.orientation.x = 0.0
-        initial_odom_msg.pose.pose.orientation.y = 0.0
-        initial_odom_msg.pose.pose.orientation.z = 0.0
-
-        initial_odom_msg.pose.covariance = np.full(shape=(36), fill_value=.0001)
-
-        initial_odom_msg.twist.twist.linear.x = 0.0
-        initial_odom_msg.twist.twist.linear.y = 0.0
-        initial_odom_msg.twist.twist.linear.z = 0.0
-
-        initial_odom_msg.twist.twist.angular.x = 0.0
-        initial_odom_msg.twist.twist.angular.y = 0.0
-        initial_odom_msg.twist.twist.angular.z = 0.0
-
-        initial_odom_msg.twist.covariance = np.full(shape=(36), fill_value=.0001)
-
-        self.initial_twist_pub.publish(initial_odom_msg)
-
     def publishEnabledFirmwareState(self):
         firmware_state_msg = FirmwareState()
 
@@ -310,6 +252,42 @@ class SNIB(Node):
     
         self.get_logger().info("Physical Simulation has begun!")
 
+    def publish_initial_controller_state(self, state):
+        #state
+        # 0 - disabled
+        # 1 - feedforward
+        # 2 - velocity
+        # 3 - position
+
+        linear_msg = ControllerCommand()
+        angular_msg = ControllerCommand()
+
+        linear_msg.mode = state
+
+        if state == 3:
+            #set the position to be underwater... zero is a hard position to maintain
+            linear_msg.setpoint_vect.z = -1.0  
+        else:
+            linear_msg.setpoint_vect.z = 0.0
+
+        angular_msg.setpoint_vect.z = 0.0
+        linear_msg.setpoint_vect.x = 0.0
+        angular_msg.setpoint_vect.x = 0.0
+        linear_msg.setpoint_vect.y = 0.0
+        angular_msg.setpoint_vect.y = 0.0
+
+        angular_msg.setpoint_quat.x = 0.0
+        angular_msg.setpoint_quat.y = 0.0
+        angular_msg.setpoint_quat.z = 0.0
+        angular_msg.setpoint_quat.w = 1.0
+
+        linear_msg.setpoint_quat.x = 0.0
+        linear_msg.setpoint_quat.y = 0.0
+        linear_msg.setpoint_quat.z = 0.0
+        linear_msg.setpoint_quat.w = 1.0
+
+        self.controller_angular_state_pub.publish(angular_msg)
+        self.controller_angular_state_pub.publish(linear_msg)
 
 def main(args=None):
     rclpy.init(args=args)
