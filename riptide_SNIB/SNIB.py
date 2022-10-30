@@ -1,4 +1,5 @@
 from logging import Logger
+import math
 from threading import Timer
 from click import launch
 from numpy import empty
@@ -128,14 +129,15 @@ class SNIB(Node):
         depth_msg.depth = msg.pose.position.z
         depth_msg.variance = depth_variance
 
-        self.depth_pub.publish(depth_msg)
+        simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
+        ros_time = time.time()
+
+        #ensure there is only a small difference between synconized times
+        if((simulink_time - ros_time)^2 < 1):
+            self.depth_pub.publish(depth_msg)
 
         if(VISUALS):
-            t = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
-
-            time2 = time.time()
-
-            self.get_logger().info(f"Simulink time {t}.... ROS time {time2}")
+            self.get_logger().info(f"Simulink time {simulink_time}.... ROS time {ros_time}")
 
             if(t < 1000000):
                 return
@@ -164,7 +166,12 @@ class SNIB(Node):
         imu_msg.linear_acceleration = msg.linear_acceleration
         imu_msg.linear_acceleration_covariance = linear_acc_cov_matrix
 
-        self.imu_pub.publish(imu_msg)
+        simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
+        ros_time = time.time()
+
+        #ensure there is only a small difference between synconized times
+        if((simulink_time - ros_time)^2 < 1):
+            self.imu_pub.publish(imu_msg)
 
     def dvl_callback(self, msg):
         dvl_msg = TwistWithCovarianceStamped()
@@ -190,8 +197,12 @@ class SNIB(Node):
             #self.publishInitalTwist()
             self.started_ekf = True
 
+        simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
+        ros_time = time.time()
 
-        self.dvl_pub.publish(dvl_msg)
+        #ensure there is only a small difference between synconized times
+        if((simulink_time - ros_time)^2 < 1):
+            self.dvl_pub.publish(dvl_msg)
 
     def thruster_callback(self, msg):
         #ensure that matlab knows exactly when the thruster forces are published
