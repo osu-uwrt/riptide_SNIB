@@ -134,6 +134,7 @@ class SNIB(Node):
 
         #ensure there is only a small difference between synconized times
         if((simulink_time - ros_time)**2 < 1):
+            self.publish_stamp_message()
             self.depth_pub.publish(depth_msg)
 
         if(VISUALS):
@@ -299,6 +300,15 @@ class SNIB(Node):
 
         self.controller_angular_state_pub.publish(angular_msg)
         self.controller_angular_state_pub.publish(linear_msg)
+
+    def publish_stamp_message(self):
+        stamp_msg = Header()
+        time_stamp = self.get_clock().now().to_msg()
+
+        stamp_msg.stamp = time_stamp
+        stamp_msg.frame_id = "world"
+
+        self.thruster_stamp_pub.publish(stamp_msg)
 
 def main(args=None):
     rclpy.init(args=args)
