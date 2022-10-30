@@ -134,8 +134,10 @@ class SNIB(Node):
 
         #ensure there is only a small difference between synconized times
         if((simulink_time - ros_time)**2 < 1):
-            self.publish_stamp_message()
             self.depth_pub.publish(depth_msg)
+        else:
+            self.publish_stamp_message()
+
 
         if(VISUALS):
             self.get_logger().info(f"Simulink time {simulink_time}.... ROS time {ros_time}")
