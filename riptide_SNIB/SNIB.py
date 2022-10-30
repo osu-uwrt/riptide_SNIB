@@ -133,16 +133,16 @@ class SNIB(Node):
         ros_time = time.time()
 
         #ensure there is only a small difference between synconized times
-        if((simulink_time - ros_time)^2 < 1):
+        if((simulink_time - ros_time)**2 < 1):
             self.depth_pub.publish(depth_msg)
 
         if(VISUALS):
             self.get_logger().info(f"Simulink time {simulink_time}.... ROS time {ros_time}")
 
-            if(t < 1000000):
+            if(simulink_time < 1000000):
                 return
 
-            self.data_visuals_engine.append_sim_pose_data(t, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+            self.data_visuals_engine.append_sim_pose_data(simulink_time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
         
     def imu_callback(self, msg):
         imu_msg = Imu()
@@ -170,7 +170,7 @@ class SNIB(Node):
         ros_time = time.time()
 
         #ensure there is only a small difference between synconized times
-        if((simulink_time - ros_time)^2 < 1):
+        if((simulink_time - ros_time)**2 < 1):
             self.imu_pub.publish(imu_msg)
 
     def dvl_callback(self, msg):
@@ -201,7 +201,7 @@ class SNIB(Node):
         ros_time = time.time()
 
         #ensure there is only a small difference between synconized times
-        if((simulink_time - ros_time)^2 < 1):
+        if((simulink_time - ros_time)**2 < 1):
             self.dvl_pub.publish(dvl_msg)
 
     def thruster_callback(self, msg):
