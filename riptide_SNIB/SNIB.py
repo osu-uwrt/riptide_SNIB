@@ -277,6 +277,7 @@ class SNIB(Node):
         angular_msg = ControllerCommand()
 
         linear_msg.mode = state
+        angular_msg.mode = state
 
         if state == 3:
             #set the position to be underwater... zero is a hard position to maintain
@@ -301,7 +302,7 @@ class SNIB(Node):
         linear_msg.setpoint_quat.w = 1.0
 
         self.controller_angular_state_pub.publish(angular_msg)
-        self.controller_angular_state_pub.publish(linear_msg)
+        self.controller_linear_state_pub.publish(linear_msg)
 
     def publish_stamp_message(self):
         stamp_msg = Header()
