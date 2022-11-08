@@ -17,7 +17,7 @@ from riptide_SNIB import simulinkControl, simulinkDataVisuals
 import numpy as np
 import time
 
-VISUALS = True # Wether to show ekf and simulation positions
+VISUALS = False # Wether to show ekf and simulation positions
 BUFFER_TIME = 3 # Number of seconds between bringup and actually starting simulation
 
 class SNIB(Node):
