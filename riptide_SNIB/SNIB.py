@@ -313,6 +313,11 @@ class SNIB(Node):
 
         self.thruster_stamp_pub.publish(stamp_msg)
 
+    def start_gz_sim_world(self):
+        #the name of the sdf file for gazebo
+        gz_world_name = "world2.sdf"
+              
+
 def main(args=None):
     rclpy.init(args=args)
 
