@@ -30,7 +30,8 @@ setup(
     },
     py_modules=[
         'riptide_SNIB.simulinkControl',
-        'riptide_SNIB.simulinkDataVisuals'
+        'riptide_SNIB.simulinkDataVisuals',
+        'riptide_SNIB.gazeboControl',
     ]
 )
 
