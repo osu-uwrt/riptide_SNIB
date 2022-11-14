@@ -1,21 +1,27 @@
-from logging import Logger
-import math
+import os
+import xacro
 from threading import Timer
-from click import launch
-from numpy import empty
-from sympy import true
+import time
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
+from ament_index_python.packages import get_package_share_directory
+
 from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState, ControllerCommand
 from sensor_msgs.msg import Imu
 from std_msgs .msg import Float32MultiArray, Header
 from nav_msgs.msg import Odometry
-import matlab.engine
+
+from riptide_msgs2.srv import GetRobotXacro
+
 from riptide_SNIB import simulinkControl, simulinkDataVisuals
-import numpy as np
-import time
+
+#keep this import as last -- interesting errors pop up otherwise
+import matlab.engine
+
+
 
 VISUALS = False # Wether to show ekf and simulation positions
 BUFFER_TIME = 3 # Number of seconds between bringup and actually starting simulation
@@ -64,6 +70,9 @@ class SNIB(Node):
         self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
+
+        #create a service to load the robot xacro data -- gazebo uses by way of bridge
+        self.sim_xacro_loader_service = self.create_service(GetRobotXacro, "load_xacro", self.load_robot_xacro_service_cb)
 
         # show expected pose
         if(VISUALS):
@@ -316,6 +325,38 @@ class SNIB(Node):
     def start_gz_sim_world(self):
         #the name of the sdf file for gazebo
         gz_world_name = "world2.sdf"
+
+    def load_robot_xacro_service_cb(self, request, response):
+        self.get_logger().info(f"Request {request.robot} xacro file!")
+
+        if(request != "tempest"):
+            self.get_logger().error(f"Cannot load xacro for {request.robot}!")
+
+        #the call back to find process the robot xacro
+        modelPath = os.path.join(
+            get_package_share_directory('riptide_descriptions2'),
+            'robots',
+            "tempest" + '.xacro'
+        )
+        
+        #default response
+        response.data = "no data"
+
+        try:
+            #load the xacro data
+            response.data = xacro.process_file(modelPath).toxml()
+        except Exception as ex:
+            self.get_logger().error("---------------------------------------------")
+            self.get_logger().error("COULD NOT OPEN ROBOT DESCRIPTION XACRO FILE")
+            self.get_logger().error(ex)
+            self.get_logger().error("---------------------------------------------")
+
+        # return the xacro data
+        return response
+
+
+
+    
               
 
 def main(args=None):
