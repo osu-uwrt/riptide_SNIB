@@ -42,7 +42,7 @@ class SNIB(Node):
         '''Sensor data (to filter)'''
         self.depth_pub = self.create_publisher(Depth, "depth/raw", qos_profile_sensor_data)
         self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl/twist", qos_profile_sensor_data)
-        self.imu_pub = self.create_publisher(Imu, "imu/imu/data", qos_profile_sensor_data)
+        self.imu_pub = self.create_publisher(Imu, "vectornav/imu", qos_profile_sensor_data)
 
         #thruster publishers
         self.thruster_stamp_pub = self.create_publisher(Header, "simulation/thruster_stamp", qos_profile_system_default)
@@ -67,7 +67,7 @@ class SNIB(Node):
 
         '''Sensor data (from Simulink)'''
         self.sim_dvl_sub = self.create_subscription(TwistStamped, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
-        self.sim_imu_sub = self.create_subscription(Imu, "snib/imu", self.imu_callback, qos_profile_sensor_data)
+        self.sim_imu_sub = self.create_subscription(Imu, "simulator/imu", self.imu_callback, qos_profile_sensor_data)
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
 
