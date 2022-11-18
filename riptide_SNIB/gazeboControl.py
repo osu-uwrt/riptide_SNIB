@@ -4,8 +4,6 @@ from time import sleep
 
 def launchGazebo():
     #creates Thread to run gazebo
-    print("Launching Gazebo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
     gazebo_thread = Thread(target=babysitGazebo, name="gazebo_thread")
     gazebo_thread.start()
 
@@ -15,6 +13,4 @@ def babysitGazebo():
     os.system(f'gz sim {WORLD_PATH}')
 
     while (True):
-        print("Running Gazebo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
         sleep(10)
