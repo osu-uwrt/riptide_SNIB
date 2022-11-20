@@ -2,11 +2,17 @@ import os
 import xacro
 from threading import Timer
 import time
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 from ament_index_python.packages import get_package_share_directory
+
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
+from tf_transformations import quaternion_matrix, quaternion_multiply, euler_matrix, euler_from_matrix
 
 from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState, ControllerCommand
@@ -33,7 +39,8 @@ class SNIB(Node):
     matlab_engine = None # the matlab engine running simulink
     data_visuals_engine = None # the data visualization engine
 
-    started_ekf = False # has the dvl been sent its inital twist
+    com_imu_trans_matrix = [-1] # saves the frame after the first call -> this should never change 
+    com_pressure_rot_matrix = [-1]
 
     def __init__(self):
         super().__init__('riptide_SNIB')
@@ -41,7 +48,7 @@ class SNIB(Node):
         # Publishers
         '''Sensor data (to filter)'''
         self.depth_pub = self.create_publisher(Depth, "depth/raw", qos_profile_sensor_data)
-        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl/twist", qos_profile_sensor_data)
+        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_twist", qos_profile_sensor_data)
         self.imu_pub = self.create_publisher(Imu, "vectornav/imu", qos_profile_sensor_data)
 
         #thruster publishers
@@ -61,6 +68,7 @@ class SNIB(Node):
         self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/linear", qos_profile_system_default)
         self.controller_angular_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/angular", qos_profile_system_default)
 
+
         # Subscribers
         '''Simulator pose (from Simulink)'''
         self.sim_pose_sub = self.create_subscription(PoseStamped, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
@@ -71,17 +79,28 @@ class SNIB(Node):
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
 
+
         #create a service to load the robot xacro data -- gazebo uses by way of bridge
         self.sim_xacro_loader_service = self.create_service(GetRobotXacro, "load_xacro", self.load_robot_xacro_service_cb)
+
 
         # show expected pose
         if(VISUALS):
             self.odometry_sub = self.create_subscription(Odometry, "odometry/filtered", self.odometry_cb, qos_profile_system_default)
             self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
 
+
+        #initialize things
         self.publishEnabledFirmwareState()
         self.publish_initial_controller_state(3)
 
+
+        #initialize tf listener
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+
+        # start up matlab
         session_names = None
         timeout = time.time() + 60
         while(session_names == None):
@@ -130,12 +149,39 @@ class SNIB(Node):
 
         time_stamp = msg.header.stamp
 
-        depth_variance = 0.1
+        #must actually be in imu frame - transform from com frame
+        com_frame_name = "tempest/base_inertia"
+        depth_frame_name = "tempest/pressure_link"
+
+        try:
+            # if the imu com transform hasnt been found yet look it up
+            if len(self.com_pressure_rot_matrix) == 1:
+                com_pressure_transform = self.tf_buffer.lookup_transform(depth_frame_name, com_frame_name, rclpy.time.Time())
+
+                self.com_pressue_quaternion =[
+                    com_pressure_transform.transform.rotation.x,
+                    com_pressure_transform.transform.rotation.y,
+                    com_pressure_transform.transform.rotation.z,
+                    com_pressure_transform.transform.rotation.w,
+                    ]
+
+                # create rotation matrix and apply translations
+                self.com_pressure_rot_matrix = quaternion_matrix(self.com_pressue_quaternion)
+                self.com_pressure_rot_matrix[0][3] = com_pressure_transform.transform.translation.x
+                self.com_pressure_rot_matrix[1][3] = com_pressure_transform.transform.translation.y
+                self.com_pressure_rot_matrix[2][3] = com_pressure_transform.transform.translation.z            
+
+        except TransformException as exception:
+            self.get_logger().info(f"Could not get transform from {com_frame_name} to {depth_frame_name}: {exception}")
+            return
+
+        depth_variance = 0.0001
 
         depth_msg.header.stamp = time_stamp
         depth_msg.header.frame_id = "tempest/pressure_link"
-        
-        depth_msg.depth = msg.pose.position.z
+
+        position = np.dot(np.array(self.com_pressure_rot_matrix), np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, 1]))
+        depth_msg.depth = position[2]
         depth_msg.variance = depth_variance
 
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
@@ -161,21 +207,57 @@ class SNIB(Node):
 
         time_stamp = msg.header.stamp
 
+        #must actually be in imu frame - transform from com frame
+        com_frame_name = "tempest/base_inertia"
+        imu_frame_name = "tempest/imu_link"
+
+        try:
+            # if the imu com transform hasnt been found yet look it up
+            if len(self.com_imu_trans_matrix) == 1:
+                com_imu_transform = self.tf_buffer.lookup_transform(imu_frame_name, com_frame_name, rclpy.time.Time())
+
+                self.com_imu_quaternion =[
+                    com_imu_transform.transform.rotation.x,
+                    com_imu_transform.transform.rotation.y,
+                    com_imu_transform.transform.rotation.z,
+                    com_imu_transform.transform.rotation.w,
+                    ]
+
+                self.com_imu_trans_matrix = quaternion_matrix(self.com_imu_quaternion)
+                self.com_imu_trans_matrix[0][3] = com_imu_transform.transform.translation.x
+                self.com_imu_trans_matrix[1][3] = com_imu_transform.transform.translation.y
+                self.com_imu_trans_matrix[2][3] = com_imu_transform.transform.translation.z
+
+        except TransformException as exception:
+            self.get_logger().info(f"Could not get transform from {com_frame_name} to {imu_frame_name}: {exception}")
+            return
+
+
         #TODO: These should be loaded from a parameter when this node starts running, not every callback.
-        orientation_cov_matrix = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        angular_vel_cov_matrix = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        linear_acc_cov_matrix  = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        orientation_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
+        angular_vel_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
+        linear_acc_cov_matrix  = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
 
         imu_msg.header.stamp = time_stamp
         imu_msg.header.frame_id = "tempest/imu_link"
 
-        imu_msg.orientation = msg.orientation
-        imu_msg.orientation = orientation_cov_matrix
+        orientation = quaternion_multiply([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w], self.com_imu_quaternion)
+        imu_msg.orientation.x = orientation[0]
+        imu_msg.orientation.y = orientation[1]
+        imu_msg.orientation.z = orientation[2]
+        imu_msg.orientation.w = orientation[3]
+        imu_msg.orientation_covariance = orientation_cov_matrix
 
-        imu_msg.angular_velocity = msg.angular_velocity
+        angular_velocity = euler_from_matrix(np.dot(np.array(self.com_imu_trans_matrix), np.array(euler_matrix(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z))))
+        imu_msg.angular_velocity.x = angular_velocity[0]
+        imu_msg.angular_velocity.y = angular_velocity[1]
+        imu_msg.angular_velocity.z = angular_velocity[2]
         imu_msg.angular_velocity_covariance = angular_vel_cov_matrix
 
-        imu_msg.linear_acceleration = msg.linear_acceleration
+        linear_acceleration = np.dot(np.array(self.com_imu_trans_matrix), np.array([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z, 1]))
+        imu_msg.linear_acceleration.x = linear_acceleration[0]
+        imu_msg.linear_acceleration.y = linear_acceleration[1]
+        imu_msg.linear_acceleration.z = linear_acceleration[2]
         imu_msg.linear_acceleration_covariance = linear_acc_cov_matrix
 
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
@@ -184,30 +266,26 @@ class SNIB(Node):
         #ensure there is only a small difference between synconized times
         if((simulink_time - ros_time)**2 < 1):
             self.imu_pub.publish(imu_msg)
-
+        else:
+            self.get_logger().error(f"Not publishing IMU because SNIB and simulink are not in sync!\nRos time is: {ros_time} and Simulink time is: {simulink_time}.")
+        
     def dvl_callback(self, msg):
         dvl_msg = TwistWithCovarianceStamped()
 
         time_stamp = msg.header.stamp
 
         #TODO: This should be loaded from a parameter when this node starts running, not every callback.
-        cov_matrix = [1.0, 1.0, 1.0, 1.0, 1.0 ,1.0, 
-                      1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,
-                      1.0, 1.0, 1.0, 1.0, 1.0 ,1.0, 
-                      1.0, 1.0, 1.0, 1.0, 1.0 ,1.0, 
-                      1.0, 1.0, 1.0, 1.0, 1.0 ,1.0, 
-                      1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,]
+        cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0 ,0.0, 
+                      0.0, 0.0001, 0.0, 0.0, 0.0 ,0.0,
+                      0.0, 0.0, 0.0001, 0.0, 0.0 ,0.0, 
+                      0.0, 0.0, 0.0, 0.0001, 0.0 ,0.0, 
+                      0.0, 0.0, 0.0, 0.0, 0.0001 ,0.0, 
+                      0.0, 0.0, 0.0, 0.0, 0.0, 0.0001,]
 
         dvl_msg.header.stamp = time_stamp
         dvl_msg.header.frame_id = "tempest/base_link"
         dvl_msg.twist.covariance = cov_matrix
         dvl_msg.twist.twist = msg.twist
-
-        if not self.started_ekf:
-            #start ekf -- it doesn't start until dvl has twist
-
-            #self.publishInitalTwist()
-            self.started_ekf = True
 
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
         ros_time = time.time()
