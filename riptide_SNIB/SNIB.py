@@ -119,13 +119,20 @@ class SNIB(Node):
                 break
 
         if (len(session_names) != 0):
-            #if a local matlab session has been launch - should be done in simulation.launch.py
-            try:
-                self.matlab_engine = matlab.engine.connect_matlab(session_names[0])
-                self.get_logger().info("Running Simulink locally on Matlab Engine: " + str(self.matlab_engine))
+            for name in session_names:
+                #try all of the names
+                if not self.matlab_engine:
+                    #if the engine hasn't been found yet.. only need one
+                    if "SNIBulink" in name:
+                        #only use the engine if designated for simulation use
+                        
+                        #if a local matlab session has been launch - should be done in simulation.launch.py
+                        try:
+                            self.matlab_engine = matlab.engine.connect_matlab(session_names[0])
+                            self.get_logger().info("Running Simulink locally on Matlab Engine: " + str(self.matlab_engine))
 
-            except:
-                self.get_logger().error("SNIB: Running Matlab session found but could not connect!")
+                        except:
+                            self.get_logger().error("SNIB: Running Matlab session found but could not connect!")
         else:
             #if runnning a hardware in loop simulation
             self.local_simulink = False

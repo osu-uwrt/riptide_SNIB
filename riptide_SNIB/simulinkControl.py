@@ -6,12 +6,56 @@ from threading import Thread
 MODEL_NAME = "Simple_3_Model" # the name of the simulink simulation
 MAX_RUN_TIME = "1000" #seconds
 
+def getMatlabEngine():
+    # return ifFound, engine
+
+    #look for matlab sessions
+    session_names = matlab.engine.find_matlab()
+    
+    if(len(session_names) != 0):
+        #if there is a session connect
+        for name in session_names:
+            if "SNIBulink" in name:
+                return True, matlab.engine.connect_matlab(name)
+    
+    return False, None
+        
+
 def launchSimulink():
+    #don't launch if matlab is already running -- 
+    ifEngine, _ = getMatlabEngine()
+    if ifEngine:
+        return
+
     #create a unique name for matlab engine
-    name = "rs" + str(round(random.random() * 100000))
+    name = "SNIBulink" + str(round(random.random() * 100000))
 
     engineThread = Thread(target=babysitMatlabEngine, args=(name, ), name="matlabsitter")
     engineThread.start()
+
+def launchSimulinkForeground():
+    # launch in different window
+
+    #don't launch if matlab is already running -- 
+    ifEngine, _ = getMatlabEngine()
+    if ifEngine:
+        return
+
+    #create a unique name for matlab engine
+    name = "SNIBulink" + str(round(random.random() * 100000))
+    path = '~/osu-uwrt/riptide_software/src/riptide_simulink/Models/Simple_3_Model'
+
+    eng = matlab.engine.start_matlab("-desktop")
+    eng.matlab.engine.shareEngine(name, nargout=0)
+    eng.cd(path, nargout=0)
+    eng.StartSim(nargout=0)
+    
+    sleep(10)
+    if(eng == None):
+        return False
+    #run until the engine can no longer be found - ie the window has been closed
+    while name in matlab.engine.find_matlab():
+        sleep(10)
 
 def babysitMatlabEngine(engineName):
     path = '~/osu-uwrt/riptide_software/src/riptide_simulink/Models/Simple_3_Model'
@@ -95,4 +139,8 @@ def continueSimulation(eng):
     
     return False
 
+
+if __name__ == "__main__":
+    #launch a new window when called by default
+    launchSimulinkForeground()
 
