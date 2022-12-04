@@ -41,6 +41,7 @@ class SNIB(Node):
 
     com_imu_trans_matrix = [-1] # saves the frame after the first call -> this should never change 
     com_pressure_rot_matrix = [-1]
+    com_pressure_translation = [-1]
 
     def __init__(self):
         super().__init__('riptide_SNIB')
@@ -125,7 +126,7 @@ class SNIB(Node):
                     #if the engine hasn't been found yet.. only need one
                     if "SNIBulink" in name:
                         #only use the engine if designated for simulation use
-                        
+
                         #if a local matlab session has been launch - should be done in simulation.launch.py
                         try:
                             self.matlab_engine = matlab.engine.connect_matlab(session_names[0])
@@ -145,6 +146,9 @@ class SNIB(Node):
 
             #wait for the engine to load
             simulinkControl.getSimulationStatus(self.matlab_engine)
+
+            #stop to ensure a clean restart
+            simulinkControl.stopSimulation(self.matlab_engine)
             
             physicalStartTimer.start()
 
@@ -162,32 +166,32 @@ class SNIB(Node):
 
         try:
             # if the imu com transform hasnt been found yet look it up
-            if len(self.com_pressure_rot_matrix) == 1:
+            if len(self.com_pressure_translation) == 1:
                 com_pressure_transform = self.tf_buffer.lookup_transform(depth_frame_name, com_frame_name, rclpy.time.Time())
 
-                self.com_pressue_quaternion =[
-                    com_pressure_transform.transform.rotation.x,
-                    com_pressure_transform.transform.rotation.y,
-                    com_pressure_transform.transform.rotation.z,
-                    com_pressure_transform.transform.rotation.w,
+                self.com_pressure_translation = [
+                    com_pressure_transform.transform.translation.x,
+                    com_pressure_transform.transform.translation.y,
+                    com_pressure_transform.transform.translation.z
                     ]
-
-                # create rotation matrix and apply translations
-                self.com_pressure_rot_matrix = quaternion_matrix(self.com_pressue_quaternion)
-                self.com_pressure_rot_matrix[0][3] = com_pressure_transform.transform.translation.x
-                self.com_pressure_rot_matrix[1][3] = com_pressure_transform.transform.translation.y
-                self.com_pressure_rot_matrix[2][3] = com_pressure_transform.transform.translation.z            
 
         except TransformException as exception:
             self.get_logger().info(f"Could not get transform from {com_frame_name} to {depth_frame_name}: {exception}")
             return
+
+
+        rot_matrix = quaternion_matrix([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[:3, :3]
+        absolute_translation = np.dot(np.array(rot_matrix), np.array(self.com_pressure_translation))
+        
+        self.get_logger().info(f"relative{self.com_pressure_translation}, absolute{absolute_translation}")
+
 
         depth_variance = 0.0001
 
         depth_msg.header.stamp = time_stamp
         depth_msg.header.frame_id = "tempest/pressure_link"
 
-        position = np.dot(np.array(self.com_pressure_rot_matrix), np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, 1]))
+        position = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z] + absolute_translation
         depth_msg.depth = position[2]
         depth_msg.variance = depth_variance
 
@@ -199,7 +203,6 @@ class SNIB(Node):
             self.depth_pub.publish(depth_msg)
         else:
             self.publish_stamp_message()
-
 
         if(VISUALS):
             self.get_logger().info(f"Simulink time {simulink_time}.... ROS time {ros_time}")
