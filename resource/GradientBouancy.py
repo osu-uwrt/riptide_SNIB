@@ -20,7 +20,7 @@ class Vertex:
 
     c1_absolute = []
     c2_absolute = []
-    c2_absolute = []
+    c3_absolute = []
 
     #connections to intersections
     intersections = []    
@@ -31,7 +31,7 @@ class Vertex:
         self.c2_relative = c2
         self.c3_relative = c3
 
-    def refectAcrossWaterPlane(self):
+    def reflectAcrossWaterPlane(self):
         # make the z coordinate into is opposite
         self.location[2] = - self.location[2]
 
@@ -246,7 +246,7 @@ class IntegrationZone:
         self.lower_bound.sort(key=return_first)
 
         #self.integrate_eq(0,-1,1,-1,2,0,2,0,0,1)
-        self.integate()
+        self.integrate()
 
     def integrate_eq(self, Mymax, Mymin, Bymax, Bymin, Xmax, Xmin, k, Cx, Cy, Cz):
         #plane defined by : k = Cx * X + Cy * Y + Cz * Z
@@ -380,7 +380,7 @@ class IntegrationZone:
 
         return m, b
 
-    def integate(self):
+    def integrate(self):
         #integrate the based on upper and lower bounds and plane
 
         #there should be one less zone than points in upper bound
@@ -507,8 +507,8 @@ bouyant_density = bouyant_force / (bB[0] + bB[1]) / (bB[2] + bB[3]) / (bB[4] + b
 
 #this needs to be done at every cycle --------------------------------
 #rotate each vertice vector to corrospond to robot orientation
-euler_rotation = [0, 0, 0] #in degrees for time being
-position = [0,0, .15] #x,y,z COB
+euler_rotation = [1, 0, 0] #in degrees for time being
+position = [1,0, 0] #x,y,z COB
 
 def calculateBoundingPaths(points):
     if(len(points) < 3):
@@ -704,7 +704,7 @@ def calculateBouyancy(raw_vertices, euler_rotation, position, bouyant_density, b
         # we need to evaluate volume above water and the simplest shapes possible
         # if the simpler shape is below the water, reflect the box across the water plane and then take that into account when calculating the final bouyancy and acting location
         for vertex in raw_vertices:
-            vertex.refectAcrossWaterPlane()
+            vertex.reflectAcrossWaterPlane()
 
     surfaced_vertices = []
     for vertex in raw_vertices:
