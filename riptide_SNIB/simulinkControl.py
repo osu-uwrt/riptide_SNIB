@@ -2,6 +2,7 @@ import random
 from time import sleep
 import matlab.engine
 from threading import Thread
+import os
 
 MODEL_NAME = "Simple_3_Model" # the name of the simulink simulation
 MAX_RUN_TIME = "1000" #seconds
@@ -21,10 +22,16 @@ def getMatlabEngine():
     return False, None
         
 
-def launchSimulink():
+def launchSimulink(foreground):
+    #foreground -- if true run in new terminal
+
     #don't launch if matlab is already running -- 
     ifEngine, _ = getMatlabEngine()
     if ifEngine:
+        return
+
+    if(foreground):
+        os.system("gnome-terminal --window -- python3 ~/osu-uwrt/development/software/src/riptide_SNIB/riptide_SNIB/simulinkControl.py")
         return
 
     #create a unique name for matlab engine
