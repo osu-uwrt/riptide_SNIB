@@ -43,7 +43,7 @@ def launchSimulinkForeground():
 
     #create a unique name for matlab engine
     name = "SNIBulink" + str(round(random.random() * 100000))
-    path = '~/osu-uwrt/riptide_software/src/riptide_simulink/Models/Simple_3_Model'
+    path = '~/osu-uwrt/development/software/src/riptide_simulink/Models/Simple_3_Model'
 
     eng = matlab.engine.start_matlab("-desktop")
     eng.matlab.engine.shareEngine(name, nargout=0)
@@ -58,7 +58,7 @@ def launchSimulinkForeground():
         sleep(10)
 
 def babysitMatlabEngine(engineName):
-    path = '~/osu-uwrt/riptide_software/src/riptide_simulink/Models/Simple_3_Model'
+    path = '~/osu-uwrt/development/software/src/riptide_simulink/Models/Simple_3_Model'
     
     eng = matlab.engine.start_matlab("-desktop")
     eng.matlab.engine.shareEngine(engineName, nargout=0)
