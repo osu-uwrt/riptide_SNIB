@@ -26,8 +26,9 @@ def launchSimulink(foreground):
     #foreground -- if true run in new terminal
 
     #don't launch if matlab is already running -- 
-    ifEngine, _ = getMatlabEngine()
+    ifEngine, eng = getMatlabEngine()
     if ifEngine:
+        prepMatlabEngine(eng)
         return
 
     if(foreground):
@@ -39,6 +40,18 @@ def launchSimulink(foreground):
 
     engineThread = Thread(target=babysitMatlabEngine, args=(name, ), name="matlabsitter")
     engineThread.start()
+
+def prepMatlabEngine(eng):
+    #called when a previous matlab engine is used
+
+    try:
+        #ensure the simulation is running
+        eng.get_param(MODEL_NAME, "SimulationStatus")
+    except:
+        #SNIB engine running but not in sim mode
+        path = '~/osu-uwrt/development/software/src/riptide_simulink/Models/Simple_3_Model'
+        eng.cd(path, nargout=0)
+        eng.StartSim(nargout=0)
 
 def launchSimulinkForeground():
     # launch in different window

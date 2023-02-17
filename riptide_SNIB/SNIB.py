@@ -12,7 +12,7 @@ from ament_index_python.packages import get_package_share_directory
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
-from tf_transformations import quaternion_matrix, quaternion_multiply, euler_matrix, euler_from_matrix
+from tf_transformations import quaternion_matrix, quaternion_from_matrix
 
 from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
 from riptide_msgs2.msg import Depth, FirmwareState, ControllerCommand
@@ -39,7 +39,11 @@ class SNIB(Node):
     matlab_engine = None # the matlab engine running simulink
     data_visuals_engine = None # the data visualization engine
 
+    #TODO: export correct rotation from gazebo
+    world_com_rot_matrix = np.eye(4) # the most recent transformation from world frame to robot frame
+
     com_imu_trans_matrix = [-1] # saves the frame after the first call -> this should never change 
+    com_dvl_trans_matrix = [-1] # saves the frame after the first call -> this should never change 
     com_pressure_rot_matrix = [-1]
     com_pressure_translation = [-1]
 
@@ -117,6 +121,7 @@ class SNIB(Node):
                 session_names = None
 
             if(time.time() > timeout):
+                session_names = []
                 break
 
         if (len(session_names) != 0):
@@ -183,10 +188,10 @@ class SNIB(Node):
         rot_matrix = quaternion_matrix([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[:3, :3]
         absolute_translation = np.dot(np.array(rot_matrix), np.array(self.com_pressure_translation))
         
-        self.get_logger().info(f"relative{self.com_pressure_translation}, absolute{absolute_translation}")
+        #self.get_logger().info(f"relative{self.com_pressure_translation}, absolute{absolute_translation}")
 
 
-        depth_variance = 0.0001
+        depth_variance = 0.000001
 
         depth_msg.header.stamp = time_stamp
         depth_msg.header.frame_id = "tempest/pressure_link"
@@ -194,6 +199,8 @@ class SNIB(Node):
         position = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z] + absolute_translation
         depth_msg.depth = position[2]
         depth_msg.variance = depth_variance
+
+        self.get_logger().info("Depth Z: " + str(position[2]))
 
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
         ros_time = time.time()
@@ -211,16 +218,14 @@ class SNIB(Node):
                 return
 
             self.data_visuals_engine.append_sim_pose_data(simulink_time, msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
-        
-    def imu_callback(self, msg):
-        imu_msg = Imu()
 
-        time_stamp = msg.header.stamp
+    def fetch_imu_transformation_matrix(self) -> bool:
+        # fetch the dvl transformation matrix from tf
 
         #must actually be in imu frame - transform from com frame
         com_frame_name = "tempest/base_inertia"
         imu_frame_name = "tempest/imu_link"
-
+        
         try:
             # if the imu com transform hasnt been found yet look it up
             if len(self.com_imu_trans_matrix) == 1:
@@ -232,39 +237,90 @@ class SNIB(Node):
                     com_imu_transform.transform.rotation.z,
                     com_imu_transform.transform.rotation.w,
                     ]
-
+                
                 self.com_imu_trans_matrix = quaternion_matrix(self.com_imu_quaternion)
-                self.com_imu_trans_matrix[0][3] = com_imu_transform.transform.translation.x
-                self.com_imu_trans_matrix[1][3] = com_imu_transform.transform.translation.y
-                self.com_imu_trans_matrix[2][3] = com_imu_transform.transform.translation.z
+                
+                #fill out translation
+                self.com_imu_trans_matrix[0][3] = float(com_imu_transform.transform.translation.x)
+                self.com_imu_trans_matrix[1][3] = float(com_imu_transform.transform.translation.y)
+                self.com_imu_trans_matrix[2][3] = float(com_imu_transform.transform.translation.z)
 
+            return True
         except TransformException as exception:
             self.get_logger().info(f"Could not get transform from {com_frame_name} to {imu_frame_name}: {exception}")
+            return False
+
+    def fetch_dvl_transformation_matrix(self) -> bool:
+        # fetch the dvl transformation matrix from tf
+
+        #must actually be in imu frame - transform from com frame
+        com_frame_name = "tempest/base_inertia"
+        dvl_frame_name = "tempest/dvl_link"
+        
+        try:
+            # if the imu com transform hasnt been found yet look it up
+            if len(self.com_dvl_trans_matrix) == 1:
+                com_dvl_transform = self.tf_buffer.lookup_transform(dvl_frame_name, com_frame_name, rclpy.time.Time())
+
+                self.com_dvl_quaternion =[
+                    com_dvl_transform.transform.rotation.x,
+                    com_dvl_transform.transform.rotation.y,
+                    com_dvl_transform.transform.rotation.z,
+                    com_dvl_transform.transform.rotation.w,
+                    ]
+
+                self.com_dvl_trans_matrix = quaternion_matrix(self.com_dvl_quaternion)
+                
+                self.get_logger().info(str(float(com_dvl_transform.transform.translation.x)))
+
+                #fill out translation
+                self.com_dvl_trans_matrix[0][3] = float(com_dvl_transform.transform.translation.x)
+                self.com_dvl_trans_matrix[1][3] = float(com_dvl_transform.transform.translation.y)
+                self.com_dvl_trans_matrix[2][3] = float(com_dvl_transform.transform.translation.z)
+
+            return True
+        except TransformException as exception:
+            self.get_logger().info(f"Could not get transform from {com_frame_name} to {dvl_frame_name}: {exception}")
+            return False
+
+    def imu_callback(self, msg):
+        imu_msg = Imu()
+
+        time_stamp = msg.header.stamp
+
+        if not self.fetch_imu_transformation_matrix():
             return
 
 
         #TODO: These should be loaded from a parameter when this node starts running, not every callback.
         orientation_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
         angular_vel_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
-        linear_acc_cov_matrix  = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
+        linear_acc_cov_matrix  = [0.001, 0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 0.1]
 
         imu_msg.header.stamp = time_stamp
         imu_msg.header.frame_id = "tempest/imu_link"
 
-        orientation = quaternion_multiply([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w], self.com_imu_quaternion)
+
+        #calculate the absolute orientation of the imu in world frame
+        self.world_com_rot_matrix = quaternion_matrix([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
+        imu_transformation_matrix = np.matmul(self.world_com_rot_matrix, self.com_imu_trans_matrix)
+        orientation = quaternion_from_matrix(imu_transformation_matrix)
+
         imu_msg.orientation.x = orientation[0]
         imu_msg.orientation.y = orientation[1]
         imu_msg.orientation.z = orientation[2]
         imu_msg.orientation.w = orientation[3]
         imu_msg.orientation_covariance = orientation_cov_matrix
 
-        angular_velocity = euler_from_matrix(np.dot(np.array(self.com_imu_trans_matrix), np.array(euler_matrix(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z))))
+        imu_orientation_matrix = imu_transformation_matrix[0:3,0:3]
+        angular_velocity = np.dot(imu_orientation_matrix, np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z]))
+
         imu_msg.angular_velocity.x = angular_velocity[0]
         imu_msg.angular_velocity.y = angular_velocity[1]
         imu_msg.angular_velocity.z = angular_velocity[2]
         imu_msg.angular_velocity_covariance = angular_vel_cov_matrix
 
-        linear_acceleration = np.dot(np.array(self.com_imu_trans_matrix), np.array([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z, 1]))
+        linear_acceleration = np.matmul(imu_orientation_matrix, np.array([msg.linear_acceleration.x, msg.linear_acceleration.y,msg.linear_acceleration.z]))
         imu_msg.linear_acceleration.x = linear_acceleration[0]
         imu_msg.linear_acceleration.y = linear_acceleration[1]
         imu_msg.linear_acceleration.z = linear_acceleration[2]
@@ -281,21 +337,37 @@ class SNIB(Node):
         
     def dvl_callback(self, msg):
         dvl_msg = TwistWithCovarianceStamped()
-
         time_stamp = msg.header.stamp
 
+        if not self.fetch_dvl_transformation_matrix():
+            return
+
         #TODO: This should be loaded from a parameter when this node starts running, not every callback.
+        #Don't Trust DVL Twist angular
         cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0 ,0.0, 
                       0.0, 0.0001, 0.0, 0.0, 0.0 ,0.0,
-                      0.0, 0.0, 0.0001, 0.0, 0.0 ,0.0, 
-                      0.0, 0.0, 0.0, 0.0001, 0.0 ,0.0, 
-                      0.0, 0.0, 0.0, 0.0, 0.0001 ,0.0, 
-                      0.0, 0.0, 0.0, 0.0, 0.0, 0.0001,]
+                      0.0, 0.0, 0.1, 0.0, 0.0 ,0.0, 
+                      0.0, 0.0, 0.0, 1000.0, 0.0 ,0.0, 
+                      0.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 
+                      0.0, 0.0, 0.0, 0.0, 0.0, 1000.0,]
 
+        #dvl msg header and cov
         dvl_msg.header.stamp = time_stamp
         dvl_msg.header.frame_id = "tempest/base_link"
         dvl_msg.twist.covariance = cov_matrix
-        dvl_msg.twist.twist = msg.twist
+        
+        #calculate linear velocities in dvl frame
+        world_dvl_trans_matrix = np.matmul(self.world_com_rot_matrix, self.com_dvl_trans_matrix)
+        dvl_velocities = np.dot(world_dvl_trans_matrix, np.array([msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z, 1]))
+        dvl_msg.twist.twist.linear.x = dvl_velocities[0]
+        dvl_msg.twist.twist.linear.y = dvl_velocities[1]
+        dvl_msg.twist.twist.linear.z = dvl_velocities[2]  
+
+        #calculate angular dvl velocities
+        dvl_angular_velocities = np.dot(world_dvl_trans_matrix, np.array([msg.twist.angular.x, msg.twist.angular.y, msg.twist.angular.z, 1]))  
+        dvl_msg.twist.twist.angular.x = dvl_angular_velocities[0]
+        dvl_msg.twist.twist.angular.y = dvl_angular_velocities[1]
+        dvl_msg.twist.twist.angular.z = dvl_angular_velocities[2]
 
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
         ros_time = time.time()
@@ -378,7 +450,7 @@ class SNIB(Node):
 
         if state == 3:
             #set the position to be underwater... zero is a hard position to maintain
-            linear_msg.setpoint_vect.z = -1.0  
+            linear_msg.setpoint_vect.z = -2.0  
         else:
             linear_msg.setpoint_vect.z = 0.0
 
@@ -441,10 +513,6 @@ class SNIB(Node):
 
         # return the xacro data
         return response
-
-
-
-    
               
 
 def main(args=None):
