@@ -9,7 +9,7 @@ def launchGazebo():
 
 def babysitGazebo():
     #runs gazebo
-    WORLD_PATH = '~/osu-uwrt/riptide_software/src/riptide_gazebo/world2.sdf'
+    WORLD_PATH = '~/osu-uwrt/development/software/src/riptide_gazebo/world2.sdf'
     os.system(f'gz sim {WORLD_PATH}')
 
     while (True):
