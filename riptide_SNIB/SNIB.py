@@ -97,7 +97,7 @@ class SNIB(Node):
 
         #initialize things
         self.publishEnabledFirmwareState()
-        self.publish_initial_controller_state(3)
+        self.publish_initial_controller_state(1)
 
 
         #initialize tf listener
