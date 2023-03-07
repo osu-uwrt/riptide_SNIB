@@ -12,12 +12,12 @@ from ament_index_python.packages import get_package_share_directory
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
-from tf_transformations import quaternion_matrix, quaternion_from_matrix
+from tf_transformations import quaternion_matrix, quaternion_from_matrix, euler_from_matrix
 
 from geometry_msgs.msg import PoseStamped, TwistStamped, TwistWithCovarianceStamped, PoseWithCovarianceStamped
-from riptide_msgs2.msg import Depth, FirmwareState, ControllerCommand
+from riptide_msgs2.msg import Depth, ControllerCommand
 from sensor_msgs.msg import Imu
-from std_msgs .msg import Float32MultiArray, Header
+from std_msgs .msg import Float32MultiArray, Header, Bool
 from nav_msgs.msg import Odometry
 
 from riptide_msgs2.srv import GetRobotXacro
@@ -67,7 +67,7 @@ class SNIB(Node):
         self.initial_twist_pub = self.create_publisher(Odometry, "simulation/twist", qos_profile_system_default)
         
         #pretend that the kill switch is in
-        self.firmware_state_pub = self.create_publisher(FirmwareState, "state/firmware", qos_profile_system_default)
+        self.kill_state_pub = self.create_publisher(Bool, "state/kill", qos_profile_system_default)
 
         #control the controllers
         self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/linear", qos_profile_system_default)
@@ -97,7 +97,7 @@ class SNIB(Node):
 
         #initialize things
         self.publishEnabledFirmwareState()
-        self.publish_initial_controller_state(1)
+        self.publish_initial_controller_state(3)
 
 
         #initialize tf listener
@@ -191,7 +191,7 @@ class SNIB(Node):
         #self.get_logger().info(f"relative{self.com_pressure_translation}, absolute{absolute_translation}")
 
 
-        depth_variance = 0.000001
+        depth_variance = 0.0000001
 
         depth_msg.header.stamp = time_stamp
         depth_msg.header.frame_id = "tempest/pressure_link"
@@ -295,7 +295,7 @@ class SNIB(Node):
         #TODO: These should be loaded from a parameter when this node starts running, not every callback.
         orientation_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
         angular_vel_cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
-        linear_acc_cov_matrix  = [0.001, 0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 0.1]
+        linear_acc_cov_matrix  = [0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]
 
         imu_msg.header.stamp = time_stamp
         imu_msg.header.frame_id = "tempest/imu_link"
@@ -305,6 +305,9 @@ class SNIB(Node):
         self.world_com_rot_matrix = quaternion_matrix([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
         imu_transformation_matrix = np.matmul(self.world_com_rot_matrix, self.com_imu_trans_matrix)
         orientation = quaternion_from_matrix(imu_transformation_matrix)
+        euler = euler_from_matrix(self.world_com_rot_matrix)
+
+        self.get_logger().info("Imu roll: " + str(euler[0]) + " Imu pitch: " + str(euler[1]) + " Imu yaw: " + str(euler[2]))
 
         imu_msg.orientation.x = orientation[0]
         imu_msg.orientation.y = orientation[1]
@@ -344,9 +347,9 @@ class SNIB(Node):
 
         #TODO: This should be loaded from a parameter when this node starts running, not every callback.
         #Don't Trust DVL Twist angular
-        cov_matrix = [0.0001, 0.0, 0.0, 0.0, 0.0 ,0.0, 
-                      0.0, 0.0001, 0.0, 0.0, 0.0 ,0.0,
-                      0.0, 0.0, 0.1, 0.0, 0.0 ,0.0, 
+        cov_matrix = [0.00001, 0.0, 0.0, 0.0, 0.0 ,0.0, 
+                      0.0, 0.00001, 0.0, 0.0, 0.0 ,0.0,
+                      0.0, 0.0, 0.00001, 0.0, 0.0 ,0.0, 
                       0.0, 0.0, 0.0, 1000.0, 0.0 ,0.0, 
                       0.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 
                       0.0, 0.0, 0.0, 0.0, 0.0, 1000.0,]
@@ -390,31 +393,11 @@ class SNIB(Node):
         self.thruster_forces_pub.publish(msg)
 
     def publishEnabledFirmwareState(self):
-        firmware_state_msg = FirmwareState()
+        kill_state_msg = Bool()
 
-        time_stamp = self.get_clock().now().to_msg()
-        firmware_state_msg.header.stamp = time_stamp
-        firmware_state_msg.header.frame_id = "world"
+        kill_state_msg.data = True
 
-        firmware_state_msg.version_major = 0
-        firmware_state_msg.version_minor = 0
-
-        firmware_state_msg.depth_sensor_initialized = False
-        firmware_state_msg.actuator_connected = False
-
-        firmware_state_msg.actuator_faults = 0
-        firmware_state_msg.peltier_cooling_threshold = 0
-        firmware_state_msg.copro_faults = 0
-        firmware_state_msg.copro_memory_usage = 0
-
-        # pretend the kill switch is in
-        firmware_state_msg.kill_switches_enabled = 1
-
-        firmware_state_msg.kill_switches_asserting_kill = 0
-        firmware_state_msg.kill_switches_needs_update = 0
-        firmware_state_msg.kill_switches_timed_out = 0
-
-        self.firmware_state_pub.publish(firmware_state_msg)
+        self.kill_state_pub.publish(kill_state_msg)
 
     def odometry_cb(self, msg):
         time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000
@@ -450,7 +433,7 @@ class SNIB(Node):
 
         if state == 3:
             #set the position to be underwater... zero is a hard position to maintain
-            linear_msg.setpoint_vect.z = -2.0  
+            linear_msg.setpoint_vect.z = -6.0  
         else:
             linear_msg.setpoint_vect.z = 0.0
 
