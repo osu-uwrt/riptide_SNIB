@@ -70,9 +70,8 @@ class SNIB(Node):
         self.kill_state_pub = self.create_publisher(Bool, "state/kill", qos_profile_system_default)
 
         #control the controllers
-        self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/linear", qos_profile_system_default)
-        self.controller_angular_state_pub = self.create_publisher(ControllerCommand, "/tempest/controller/angular", qos_profile_system_default)
-
+        self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/talos/controller/linear", qos_profile_system_default)
+        self.controller_angular_state_pub = self.create_publisher(ControllerCommand, "/talos/controller/angular", qos_profile_system_default)
 
         # Subscribers
         '''Simulator pose (from Simulink)'''
@@ -166,8 +165,8 @@ class SNIB(Node):
         time_stamp = msg.header.stamp
 
         #must actually be in imu frame - transform from com frame
-        com_frame_name = "tempest/base_inertia"
-        depth_frame_name = "tempest/pressure_link"
+        com_frame_name = "talos/base_inertia"
+        depth_frame_name = "talos/pressure_link"
 
         try:
             # if the imu com transform hasnt been found yet look it up
@@ -194,7 +193,7 @@ class SNIB(Node):
         depth_variance = 0.0000001
 
         depth_msg.header.stamp = time_stamp
-        depth_msg.header.frame_id = "tempest/pressure_link"
+        depth_msg.header.frame_id = "talos/pressure_link"
 
         position = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z] + absolute_translation
         depth_msg.depth = position[2]
@@ -223,8 +222,8 @@ class SNIB(Node):
         # fetch the dvl transformation matrix from tf
 
         #must actually be in imu frame - transform from com frame
-        com_frame_name = "tempest/base_inertia"
-        imu_frame_name = "tempest/imu_link"
+        com_frame_name = "talos/base_inertia"
+        imu_frame_name = "talos/imu_link"
         
         try:
             # if the imu com transform hasnt been found yet look it up
@@ -254,8 +253,8 @@ class SNIB(Node):
         # fetch the dvl transformation matrix from tf
 
         #must actually be in imu frame - transform from com frame
-        com_frame_name = "tempest/base_inertia"
-        dvl_frame_name = "tempest/dvl_link"
+        com_frame_name = "talos/base_inertia"
+        dvl_frame_name = "talos/dvl_link"
         
         try:
             # if the imu com transform hasnt been found yet look it up
@@ -298,7 +297,7 @@ class SNIB(Node):
         linear_acc_cov_matrix  = [0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]
 
         imu_msg.header.stamp = time_stamp
-        imu_msg.header.frame_id = "tempest/imu_link"
+        imu_msg.header.frame_id = "talos/imu_link"
 
 
         #calculate the absolute orientation of the imu in world frame
@@ -356,7 +355,7 @@ class SNIB(Node):
 
         #dvl msg header and cov
         dvl_msg.header.stamp = time_stamp
-        dvl_msg.header.frame_id = "tempest/base_link"
+        dvl_msg.header.frame_id = "talos/base_link"
         dvl_msg.twist.covariance = cov_matrix
         
         #calculate linear velocities in dvl frame
@@ -472,14 +471,14 @@ class SNIB(Node):
     def load_robot_xacro_service_cb(self, request, response):
         self.get_logger().info(f"Request {request.robot} xacro file!")
 
-        if(request != "tempest"):
+        if(request != "talos"):
             self.get_logger().error(f"Cannot load xacro for {request.robot}!")
 
         #the call back to find process the robot xacro
         modelPath = os.path.join(
             get_package_share_directory('riptide_descriptions2'),
             'robots',
-            "tempest" + '.xacro'
+            "talos" + '.xacro'
         )
         
         #default response
