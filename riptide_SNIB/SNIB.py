@@ -52,22 +52,22 @@ class SNIB(Node):
 
         # Publishers
         '''Sensor data (to filter)'''
-        self.depth_pub = self.create_publisher(Depth, "depth/raw", qos_profile_sensor_data)
-        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "dvl_twist", qos_profile_sensor_data)
-        self.imu_pub = self.create_publisher(Imu, "vectornav/imu", qos_profile_sensor_data)
+        self.depth_pub = self.create_publisher(Depth, "/talos/depth/raw", qos_profile_sensor_data)
+        self.dvl_pub = self.create_publisher(TwistWithCovarianceStamped, "/talos/dvl_twist", qos_profile_sensor_data)
+        self.imu_pub = self.create_publisher(Imu, "/talos/vectornav/imu", qos_profile_sensor_data)
 
         #thruster publishers
-        self.thruster_stamp_pub = self.create_publisher(Header, "simulation/thruster_stamp", qos_profile_system_default)
-        self.thruster_forces_pub = self.create_publisher(Float32MultiArray, "simulation/thruster_forces", qos_profile_system_default)
+        self.thruster_stamp_pub = self.create_publisher(Header, "/talos/simulation/thruster_stamp", qos_profile_system_default)
+        self.thruster_forces_pub = self.create_publisher(Float32MultiArray, "/talos/simulation/thruster_forces", qos_profile_system_default)
 
         #One time publisher for starting position at 0s
-        self.initial_position_pub = self.create_publisher(PoseWithCovarianceStamped, "set_pose", qos_profile_system_default)
+        self.initial_position_pub = self.create_publisher(PoseWithCovarianceStamped, "/talos/set_pose", qos_profile_system_default)
 
         #Fake dvl twist publisher
-        self.initial_twist_pub = self.create_publisher(Odometry, "simulation/twist", qos_profile_system_default)
+        self.initial_twist_pub = self.create_publisher(Odometry, "/talos/simulation/twist", qos_profile_system_default)
         
         #pretend that the kill switch is in
-        self.kill_state_pub = self.create_publisher(Bool, "state/kill", qos_profile_system_default)
+        self.kill_state_pub = self.create_publisher(Bool, "/talos/state/kill", qos_profile_system_default)
 
         #control the controllers
         self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/talos/controller/linear", qos_profile_system_default)
@@ -75,22 +75,22 @@ class SNIB(Node):
 
         # Subscribers
         '''Simulator pose (from Simulink)'''
-        self.sim_pose_sub = self.create_subscription(PoseStamped, "simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
+        self.sim_pose_sub = self.create_subscription(PoseStamped, "/talos/simulator/pose", self.sim_pose_callback, qos_profile_sensor_data)
 
         '''Sensor data (from Simulink)'''
-        self.sim_dvl_sub = self.create_subscription(TwistStamped, "simulator/twist", self.dvl_callback, qos_profile_sensor_data)
-        self.sim_imu_sub = self.create_subscription(Imu, "simulator/imu", self.imu_callback, qos_profile_sensor_data)
+        self.sim_dvl_sub = self.create_subscription(TwistStamped, "/talos/simulator/twist", self.dvl_callback, qos_profile_sensor_data)
+        self.sim_imu_sub = self.create_subscription(Imu, "/talos/simulator/imu", self.imu_callback, qos_profile_sensor_data)
 
-        self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "thruster_forces", self.thruster_callback, qos_profile_system_default)
+        self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "/talos/thruster_forces", self.thruster_callback, qos_profile_system_default)
 
 
         #create a service to load the robot xacro data -- gazebo uses by way of bridge
-        self.sim_xacro_loader_service = self.create_service(GetRobotXacro, "load_xacro", self.load_robot_xacro_service_cb)
+        self.sim_xacro_loader_service = self.create_service(GetRobotXacro, "/talos/load_xacro", self.load_robot_xacro_service_cb)
 
 
         # show expected pose
         if(VISUALS):
-            self.odometry_sub = self.create_subscription(Odometry, "odometry/filtered", self.odometry_cb, qos_profile_system_default)
+            self.odometry_sub = self.create_subscription(Odometry, "/talos/odometry/filtered", self.odometry_cb, qos_profile_system_default)
             self.data_visuals_engine = simulinkDataVisuals.visualizationManager()
 
 
