@@ -199,8 +199,6 @@ class SNIB(Node):
         depth_msg.depth = position[2]
         depth_msg.variance = depth_variance
 
-        self.get_logger().info("Depth Z: " + str(position[2]))
-
         simulink_time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000 
         ros_time = time.time()
 
@@ -270,8 +268,6 @@ class SNIB(Node):
 
                 self.com_dvl_trans_matrix = quaternion_matrix(self.com_dvl_quaternion)
                 
-                self.get_logger().info(str(float(com_dvl_transform.transform.translation.x)))
-
                 #fill out translation
                 self.com_dvl_trans_matrix[0][3] = float(com_dvl_transform.transform.translation.x)
                 self.com_dvl_trans_matrix[1][3] = float(com_dvl_transform.transform.translation.y)
@@ -305,8 +301,6 @@ class SNIB(Node):
         imu_transformation_matrix = np.matmul(self.world_com_rot_matrix, self.com_imu_trans_matrix)
         orientation = quaternion_from_matrix(imu_transformation_matrix)
         euler = euler_from_matrix(self.world_com_rot_matrix)
-
-        self.get_logger().info("Imu roll: " + str(euler[0]) + " Imu pitch: " + str(euler[1]) + " Imu yaw: " + str(euler[2]))
 
         imu_msg.orientation.x = orientation[0]
         imu_msg.orientation.y = orientation[1]
