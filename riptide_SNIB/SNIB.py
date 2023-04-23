@@ -39,6 +39,8 @@ class SNIB(Node):
     matlab_engine = None # the matlab engine running simulink
     data_visuals_engine = None # the data visualization engine
 
+    kill_state = False # the kill state of the robot
+
     #TODO: export correct rotation from gazebo
     world_com_rot_matrix = np.eye(4) # the most recent transformation from world frame to robot frame
 
@@ -68,6 +70,7 @@ class SNIB(Node):
         
         #pretend that the kill switch is in
         self.kill_state_pub = self.create_publisher(Bool, "/talos/state/kill", qos_profile_system_default)
+        self.kill_state_sub = self.create_subscription(Bool, "/talos/state/kill", self.kill_state_cb, qos_profile_system_default)
 
         #control the controllers
         self.controller_linear_state_pub = self.create_publisher(ControllerCommand, "/talos/controller/linear", qos_profile_system_default)
@@ -83,7 +86,6 @@ class SNIB(Node):
 
         self.thruster_forces_sub = self.create_subscription(Float32MultiArray, "/talos/thruster_forces", self.thruster_callback, qos_profile_system_default)
 
-
         #create a service to load the robot xacro data -- gazebo uses by way of bridge
         self.sim_xacro_loader_service = self.create_service(GetRobotXacro, "/talos/load_xacro", self.load_robot_xacro_service_cb)
 
@@ -95,7 +97,7 @@ class SNIB(Node):
 
 
         #initialize things
-        self.publishEnabledFirmwareState()
+        self.publishFirmwareState(False)
         self.publish_initial_controller_state(3)
 
 
@@ -246,6 +248,8 @@ class SNIB(Node):
         except TransformException as exception:
             self.get_logger().info(f"Could not get transform from {com_frame_name} to {imu_frame_name}: {exception}")
             return False
+        
+    
 
     def fetch_dvl_transformation_matrix(self) -> bool:
         # fetch the dvl transformation matrix from tf
@@ -385,12 +389,19 @@ class SNIB(Node):
         self.thruster_stamp_pub.publish(stamp_msg)
         self.thruster_forces_pub.publish(msg)
 
-    def publishEnabledFirmwareState(self):
+    def publishFirmwareState(self, state):
         kill_state_msg = Bool()
 
-        kill_state_msg.data = True
+        state = self.kill_state # this allows the kill state to be overriden by publishing a contrasting message
 
+        kill_state_msg.data = state
         self.kill_state_pub.publish(kill_state_msg)
+
+        cb = lambda : {self.publishFirmwareState(state)}
+        self.create_timer(0.15, cb)
+
+    def kill_state_cb(self, msg):
+        self.kill_state = msg.data # override the kill state screamer
 
     def odometry_cb(self, msg):
         time = msg.header.stamp.sec + msg.header.stamp.nanosec / 1000000000
